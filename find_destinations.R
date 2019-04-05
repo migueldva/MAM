@@ -95,3 +95,4 @@ find_destinations <- function(airport, start_date = "2018-01-01",
   }
 }
 
+
