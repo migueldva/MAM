@@ -18,6 +18,7 @@ flights_domesc <- read.csv("data/flights_domesc.csv", header = T, stringsAsFacto
 flights_int <- read.csv("data/flights_int.csv", header = T, stringsAsFactors = F)
 pax_domesc <- read.csv("data/pax_domesc.csv", header = T, stringsAsFactors = F)
 pax_int <- read.csv("data/pax_int.csv", header = T, stringsAsFactors = F)
+tua_data <- read.csv("data/tua_data.csv", header = T, stringsAsFactors = F)
 pax_cons <- rbind(pax_domesc,pax_int)
 
 flights_domesc[is.na(flights_domesc)] <- 0
@@ -85,8 +86,17 @@ ui <- navbarPage(
                         }")),
         column(12,
                highchartOutput(outputId = "traffic_ts"))
-      )
+      ),
+      fluidRow(
+        tags$style(HTML("body {
+                        font-family: frutiger;
+                        }")),
+        column(12,
+               highchartOutput(outputId = "tua_data"))
+        )
     ),
+    
+    
     
     tabPanel(
       title = strong(div("Statistics by company", 
@@ -278,9 +288,78 @@ server <- function(input, output){
                             fontWeight = "bold")) %>%
       hc_subtitle(text = "Source: SCT", style = list(fontFamily = "frutiger")) %>%
       hc_legend(verticalAlign = "top", itemStyle = list(fontFamily = "frutiger")) %>%
-      hc_xAxis(labels = list(fontFamily = "frutiger")) 
+      hc_xAxis(labels =list(fontFamily = "frutiger")) 
     
   })
+  
+  output$tua_data <- renderHighchart({
+    
+    input_code <- pax_cons$Origin_IATA[match(input$airport,pax_domesc$Origin)]
+    
+    if(input$type2 != "Consolidated"){
+      data <- convert_ts(input_code,
+                         type.1 = "airport",
+                         type.2 = tolower(input$type2),
+                         type.3 = "passengers",
+                         start.date = input$date_range[1] %m-% months(12),
+                         end.date = input$date_range[2],
+                         departing = T)
+      
+      dates <- seq.Date(from = input$date_range[1] %m-% months(12), to = input$date_range[2], by = "1 months")
+      
+      tua_data_x <- filter(tua_data, TYPE == input$type2)
+      tua_data_x$DATE <- as.Date(tua_data_x$DATE, format = "%m/%d/%Y")
+      
+      tua <- tua_data_x[tua_data_x$DATE %in% dates, input_code]
+      
+      aero_rev <- data*tua 
+      aero_rev <- fortify(aero_rev)
+      
+      highchart(type = "stock") %>%
+        hc_add_series(aero_rev, hcaes(x = Index, y = aero_rev), yAxis = 0, color = "red", name = "Aeronautical revenue", 
+                      type = "area", fillColor = list(linearGradient = c(0,0,1,1), stops = list(c(0, "#F65555"), c(0,"#F19191"))))
+    } else{
+      data_d <- convert_ts(input_code,
+                         type.1 = "airport",
+                         type.2 = "domestic",
+                         type.3 = "passengers",
+                         start.date = input$date_range[1] %m-% months(12),
+                         end.date = input$date_range[2],
+                         departing = T)
+      data_i <- convert_ts(input_code,
+                           type.1 = "airport",
+                           type.2 = "international",
+                           type.3 = "passengers",
+                           start.date = input$date_range[1] %m-% months(12),
+                           end.date = input$date_range[2],
+                           departing = T)
+      
+      dates <- seq.Date(from = input$date_range[1] %m-% months(12), to = input$date_range[2], by = "1 months")
+      
+      tua_data_d <- filter(tua_data, TYPE == "domestic")
+      tua_data_i <- filter(tua_data, TYPE == "international")
+      
+      tua_d <- tua_data_d[tua_data_d$DATE %in% dates, input_code]
+      tua_i <- tua_data_i[tua_data_i$DATE %in% dates, input_code]
+      
+      aero_rev_d <- data_d*tua_d 
+      aero_rev_i <- data_i*tua_i 
+      aero_rev_d <- fortify(aero_rev_d)
+      aero_rev_i <- fortify(aero_rev_i)
+      aero_rev <- cbind(aero_rev_d, aero_rev_i$aero_rev_i)
+      
+      highchart(type = "stock", plotOptions = list(stacking = "normal")) %>%
+        hc_add_series(aero_rev, hcaes(x = Index, y = aero_rev_d), name = "Domestic aeronautical rev.", type = "area") %>%
+        hc_add_series(aero_rev, hcaes(x = Index, y = aero_rev_i), name = "International aeronautical rev.", type = "area")
+      
+      
+    }
+    
+
+    
+    
+  })
+ 
 }
   
 
