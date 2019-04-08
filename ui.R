@@ -12,6 +12,7 @@ library(lubridate)
 library(highcharter)
 library(shinythemes)
 library(rjson)
+library(markdown)
 
 # Load data ----
 flights_domesc <- read.csv("data/flights_domesc.csv", header = T, stringsAsFactors = F)
@@ -36,25 +37,21 @@ world_map <- fromJSON(file = "countries/world-palestine-highres.geo.json")
 source("convert_ts.R")
 source("find_destinations.R")
 source("simple_cap.R")
+source("mkt_exposure.R")
 
 #Design UI ---
 
 ui <- navbarPage(
-    theme = shinytheme("cosmo"),
-    title = strong(div("", 
-                style = "font-family:frutiger;font-size:125%; text-align:center; vertical-align:middle")),
-    tabPanel(
-      title = strong(div("Statistics by airport", 
-                 style = "font-family:frutiger;font-size:125%; text-align:center; vertical-align:middle")),
-      fluidRow(
-        tags$style(HTML("body {
-                      font-family: frutiger;
-                        }")),
-        column(4,
-               HTML(
-                 "<h4>Welcome to the Mexican Air Monitor!</h4>
-                  <h5>Explore detailed statistics for every Mexican airport since 2001!</h5>"
-               ),
+  theme = shinytheme("cosmo"),
+  title = strong(div("")),
+  tabPanel(
+    title = strong("Intro"),
+    includeMarkdown("mam_intro.Rmd")
+  ),
+  tabPanel(
+    title = strong(div("Statistics by airport")),
+    fluidRow(
+        column(3,
                selectInput(inputId = "airport", 
                            label = "Airport",
                            choices = sort(unique(c(pax_domesc$Origin,pax_domesc$Destination))),
@@ -77,63 +74,51 @@ ui <- navbarPage(
                               weekstart = 0, language = "en", separator = " to ", width = NULL,
                               autoclose = TRUE),
                style = "background-color:#FCFDFF;"),
-        column(8,
-               highchartOutput(outputId = "destination_map"))
+      column(9,
+             h3("Market exposure:"),
+             textInput(inputId = "n_exposure", label = "", value = 10, width = "12%"),
+             highchartOutput(outputId = "mkt_exposure", height = 250))
       ),
-      fluidRow(
-        tags$style(HTML("body {
-                      font-family: frutiger;
-                        }")),
+    fluidRow(
         column(12,
                highchartOutput(outputId = "traffic_ts"))
-      ),
-      fluidRow(
-        tags$style(HTML("body {
-                        font-family: frutiger;
-                        }")),
-        column(12,
-               highchartOutput(outputId = "tua_data"))
-        )
-    ),
-    
-    
-    
-    tabPanel(
-      title = strong(div("Statistics by company", 
-                         style = "font-family:frutiger;font-size:125%; text-align:center; vertical-align:middle")),
-      fluidRow(
-        tags$style(HTML("body {
-                      font-family: frutiger;
-                        }")),
+      )
+  ),
+  
+  
+  
+  tabPanel(
+    title = strong("Statistics by company"),
+    fluidRow(
         column(3,
                selectInput(
                  inputId = "company",
                  label = "Airport Group",
                  choices = c("ASUR","GAP","OMA","Mexico City","Other"),
                  selected = "", multiple = F)),
-        column(3,
-               selectInput(inputId = "type2.c",
-                           label = "Traffic type",
-                           choices = c("Domestic", "International", "Consolidated"),
-                           selected = "", multiple = F)),
-        column(3,
-               selectInput(inputId = "type3.c",
-                           label = "Variable type",
-                           choices = c("Passengers", "Flights", "Passengers per flight"),
-                           selected = "", multiple = F)),
-        column(3,
-               dateRangeInput(inputId = "date_range.c", 
-                              label = "Period (YYYY-MM-DD)", 
-                              start = as.Date("2018-01-01", format = "%Y-%m-%d"), 
-                              end = as.Date("2019-01-01", format = "%Y-%m-%d"), 
-                              min = as.Date("2001-01-01", format = "%Y-%m-%d"),
-                              max = as.Date("2019-01-01", format = "%Y-%m-%d"), 
-                              format = "yyyy-mm-dd", startview = "month",
-                              weekstart = 0, language = "en", separator = " to ", width = NULL,
-                              autoclose = TRUE))
-          
-        )
+      column(3,
+             selectInput(inputId = "type2.c",
+                         label = "Traffic type",
+                         choices = c("Domestic", "International", "Consolidated"),
+                         selected = "", multiple = F)),
+      column(3,
+             selectInput(inputId = "type3.c",
+                         label = "Variable type",
+                         choices = c("Passengers", "Flights", "Passengers per flight"),
+                         selected = "", multiple = F)),
+      column(3,
+             dateRangeInput(inputId = "date_range.c", 
+                            label = "Period (YYYY-MM-DD)", 
+                            start = as.Date("2018-01-01", format = "%Y-%m-%d"), 
+                            end = as.Date("2019-01-01", format = "%Y-%m-%d"), 
+                            min = as.Date("2001-01-01", format = "%Y-%m-%d"),
+                            max = as.Date("2019-01-01", format = "%Y-%m-%d"), 
+                            format = "yyyy-mm-dd", startview = "month",
+                            weekstart = 0, language = "en", separator = " to ", width = NULL,
+                            autoclose = TRUE))
+      
       )
+)
 )
 
 
@@ -150,6 +135,24 @@ server <- function(input, output){
     input_code <- pax_cons$Origin_IATA[match(input$airport,pax_domesc$Origin)]
     
     #Retreive destinations for selected airport.
+    
+    if(input$type2 == "Consolidated"){type2 = "domestic"}else{type2 = tolower(input$type2)}
+    
+    test <- convert_ts(input_code,
+                       type.1 = "airport",
+                       type.2 = type2,
+                       type.3 = "flights",
+                       start.date = input$date_range[1] %m-% months(12),
+                       end.date = input$date_range[2] 
+    )
+    
+    validate(
+      if(length(test[paste0(input$date_range[1],"/",input$date_range[2])]) == 0){
+        paste0("Ooops, looks like ",simpleCap(input$airport)," doesn't have ",tolower(input$type2)," ",tolower(input$type3)," for the selected dates.\n",
+               "Please change your selection.")
+      } else {NULL}
+    )
+    
     destinations_df <- find_destinations(airport = input_code,
                                          start_date = input$date_range[1],
                                          end_date = input$date_range[2],
@@ -158,7 +161,7 @@ server <- function(input, output){
                                          mkt_share = T)
     #Make a data.frame with airport locations and variable.
     airport_destinations <- merge(destinations_df,airport_codes[,c(4,6,10,12,13)], 
-                               by.x = "destinations", by.y = "iata_code", all = F)
+                                  by.x = "destinations", by.y = "iata_code", all = F)
     
     
     main_destinations <- top_n(airport_destinations, min(length(airport_destinations$destinations),5), mkt_share)
@@ -195,14 +198,14 @@ server <- function(input, output){
       country_mkt <- country_mkt %>%
         group_by(iso_country) %>%
         summarise(value = mean(mkt_share))
-      } else {
+    } else {
       data_main$z <- data_main$z*100
       data_secondary$z <- data_secondary$z*100
       aux.label <- "<b>Mkt. share:</b> {point.z}%"
       country_mkt <- country_mkt %>%
         group_by(iso_country) %>%
         summarise(value = sum(mkt_share)*100)
-      }
+    }
     
     highchart(type = "map") %>%
       hc_add_series(mapData = world_map,
@@ -215,7 +218,6 @@ server <- function(input, output){
                     borderColor = "#FAFAFA", borderWidth = 0.1,
                     tooltip = list(valueDecimals = 2, valueSuffix = "%")) %>%
       hc_colorAxis(minColor = "#C5C5C5", maxColor = "#1C1C1C", showInLegend = F) %>%
-      #hc_title(text = paste0(substr(input$type3,1,nchar(input$type3)-1), " market share per destination (2018)"), align = "left") %>%
       hc_add_series(airport_locations, type = "mappoint", name = "Airport location", maxSize = "10%", color = "#E2A206",
                     tooltip = list(pointFormat = "{point.properties.z}")) %>%
       hc_add_series(data = data_main,
@@ -234,9 +236,49 @@ server <- function(input, output){
                                                         aux.label)),
                     visible = F) %>%
       hc_mapNavigation(enabled = TRUE, buttonOptions = list(verticalAlign = "top", align = "right")) %>%
-      hc_legend(verticalAlign = "top", itemStyle = list(fontFamily = "frutiger"))
+      hc_legend(verticalAlign = "top")
   })
   
+  #Destination exposure
+  output$mkt_exposure <- renderHighchart({
+    
+    
+    input_code <- pax_cons$Origin_IATA[match(input$airport,pax_domesc$Origin)]
+    
+    if(input$type2 == "Consolidated"){type2 = "domestic"}else{type2 = tolower(input$type2)}
+    
+    test <- convert_ts(input_code,
+                       type.1 = "airport",
+                       type.2 = type2,
+                       type.3 = "flights",
+                       start.date = input$date_range[1] %m-% months(12),
+                       end.date = input$date_range[2] 
+    )
+    
+    validate(
+      if(length(test[paste0(input$date_range[1],"/",input$date_range[2])]) == 0){
+        paste0("Ooops, looks like ",simpleCap(input$airport)," doesn't have ",tolower(input$type2)," ",tolower(input$type3)," for the selected dates.\n",
+               "Please change your selection.")
+      } else {NULL}
+    )
+    
+    market <- market_exposure(input_code, start.date = input$date_range[1],
+                              end.date = input$date_range[2],
+                              type.2 = tolower(input$type2),
+                              type.3 = tolower(input$type3),
+                              n = input$n_exposure)
+    
+    if(input$type3 == "Passengers per flight"){
+      aux.txt <- "Avg. pax per flight"
+    } else {aux.txt <- "Market share"}
+    
+    hchart(market, "column", hcaes(x = destinations, y = mkt_share, color = coloract), name = aux.txt) %>%
+      hc_xAxis(title = list(text = "Destination")) %>%
+      hc_yAxis(title = list(text = aux.txt))
+    
+  })
+  
+  #Traffic time series
   output$traffic_ts <- renderHighchart({
     
     input_code <- pax_cons$Origin_IATA[match(input$airport,pax_domesc$Origin)]
@@ -270,10 +312,17 @@ server <- function(input, output){
       )
     }
     
+    validate(
+      if(length(data[paste0(input$date_range[1],"/",input$date_range[2])]) == 0){
+        ""
+      } else {NULL}
+    )
+    
     growth <- round(diff(data, lag = 12)/lag.xts(data, k = 12), digits = 2)
+    growth[is.na(growth)] <- 0
     plot_data <- fortify(data[paste0(input$date_range[1],"/",input$date_range[2])])
     names(plot_data) <- c("Index", "data")
-    plot_data <- cbind(plot_data, growth = coredata(na.omit(growth)))
+    plot_data <- cbind(plot_data, growth = coredata(growth[paste0(input$date_range[1],"/",input$date_range[2])]))
     plot_data$type <- plot_data$growth > 0
     plot_data <- mutate(plot_data, coloract = colorize(type, c("#AEB0B3","#464749")))
     
@@ -284,83 +333,13 @@ server <- function(input, output){
                     yAxis = 1, type = 'column', 
                     name = "YoY change (%)") %>%
       hc_title(text = paste0(input$type3, " YoY% growth (", paste(as.character(input$date_range), collapse = " to "),")"), 
-               style = list(fontFamily = "frutiger",
-                            fontWeight = "bold")) %>%
-      hc_subtitle(text = "Source: SCT", style = list(fontFamily = "frutiger")) %>%
-      hc_legend(verticalAlign = "top", itemStyle = list(fontFamily = "frutiger")) %>%
-      hc_xAxis(labels =list(fontFamily = "frutiger")) 
+               style = list(fontWeight = "bold")) %>%
+      hc_subtitle(text = "Source: SCT") %>%
+      hc_legend(verticalAlign = "top") 
     
   })
   
-  output$tua_data <- renderHighchart({
-    
-    input_code <- pax_cons$Origin_IATA[match(input$airport,pax_domesc$Origin)]
-    
-    if(input$type2 != "Consolidated"){
-      data <- convert_ts(input_code,
-                         type.1 = "airport",
-                         type.2 = tolower(input$type2),
-                         type.3 = "passengers",
-                         start.date = input$date_range[1] %m-% months(12),
-                         end.date = input$date_range[2],
-                         departing = T)
-      
-      dates <- seq.Date(from = input$date_range[1] %m-% months(12), to = input$date_range[2], by = "1 months")
-      
-      tua_data_x <- filter(tua_data, TYPE == input$type2)
-      tua_data_x$DATE <- as.Date(tua_data_x$DATE, format = "%m/%d/%Y")
-      
-      tua <- tua_data_x[tua_data_x$DATE %in% dates, input_code]
-      
-      aero_rev <- data*tua 
-      aero_rev <- fortify(aero_rev)
-      
-      highchart(type = "stock") %>%
-        hc_add_series(aero_rev, hcaes(x = Index, y = aero_rev), yAxis = 0, color = "red", name = "Aeronautical revenue", 
-                      type = "area", fillColor = list(linearGradient = c(0,0,1,1), stops = list(c(0, "#F65555"), c(0,"#F19191"))))
-    } else{
-      data_d <- convert_ts(input_code,
-                         type.1 = "airport",
-                         type.2 = "domestic",
-                         type.3 = "passengers",
-                         start.date = input$date_range[1] %m-% months(12),
-                         end.date = input$date_range[2],
-                         departing = T)
-      data_i <- convert_ts(input_code,
-                           type.1 = "airport",
-                           type.2 = "international",
-                           type.3 = "passengers",
-                           start.date = input$date_range[1] %m-% months(12),
-                           end.date = input$date_range[2],
-                           departing = T)
-      
-      dates <- seq.Date(from = input$date_range[1] %m-% months(12), to = input$date_range[2], by = "1 months")
-      
-      tua_data_d <- filter(tua_data, TYPE == "domestic")
-      tua_data_i <- filter(tua_data, TYPE == "international")
-      
-      tua_d <- tua_data_d[tua_data_d$DATE %in% dates, input_code]
-      tua_i <- tua_data_i[tua_data_i$DATE %in% dates, input_code]
-      
-      aero_rev_d <- data_d*tua_d 
-      aero_rev_i <- data_i*tua_i 
-      aero_rev_d <- fortify(aero_rev_d)
-      aero_rev_i <- fortify(aero_rev_i)
-      aero_rev <- cbind(aero_rev_d, aero_rev_i$aero_rev_i)
-      
-      highchart(type = "stock", plotOptions = list(stacking = "normal")) %>%
-        hc_add_series(aero_rev, hcaes(x = Index, y = aero_rev_d), name = "Domestic aeronautical rev.", type = "area") %>%
-        hc_add_series(aero_rev, hcaes(x = Index, y = aero_rev_i), name = "International aeronautical rev.", type = "area")
-      
-      
-    }
-    
-
-    
-    
-  })
- 
 }
-  
+
 
 shinyApp(ui, server)
