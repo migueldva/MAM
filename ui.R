@@ -51,38 +51,44 @@ ui <- navbarPage(
   tabPanel(
     title = strong(div("Statistics by airport")),
     fluidRow(
-        column(3,
-               selectInput(inputId = "airport", 
-                           label = "Airport",
-                           choices = sort(unique(c(pax_domesc$Origin,pax_domesc$Destination))),
-                           selected = "", multiple = F),
-               selectInput(inputId = "type2",
-                           label = "Traffic type",
-                           choices = c("Domestic", "International", "Consolidated"),
-                           selected = "Consolidated", multiple = F),
-               selectInput(inputId = "type3",
-                           label = "Variable type",
-                           choices = c("Passengers", "Flights", "Passengers per flight"),
-                           selected = "", multiple = F),
-               dateRangeInput(inputId = "date_range", 
-                              label = "Period (YYYY-MM-DD)", 
-                              start = as.Date("2018-01-01", format = "%Y-%m-%d"), 
-                              end = as.Date("2019-01-01", format = "%Y-%m-%d"), 
-                              min = as.Date("2001-01-01", format = "%Y-%m-%d"),
-                              max = as.Date("2019-01-01", format = "%Y-%m-%d"), 
-                              format = "yyyy-mm-dd", startview = "month",
-                              weekstart = 0, language = "en", separator = " to ", width = NULL,
-                              autoclose = TRUE),
-               style = "background-color:#FCFDFF;"),
-      column(9,
-             h3("Market exposure:"),
-             textInput(inputId = "n_exposure", label = "", value = 10, width = "12%"),
-             highchartOutput(outputId = "mkt_exposure", height = 250))
-      ),
+      column(3,
+             selectInput(inputId = "airport", 
+                         label = "Airport",
+                         choices = sort(unique(c(pax_domesc$Origin,pax_domesc$Destination))),
+                         selected = "", multiple = F),
+             selectInput(inputId = "type2",
+                         label = "Traffic type",
+                         choices = c("Domestic", "International", "Consolidated"),
+                         selected = "Consolidated", multiple = F),
+             selectInput(inputId = "type3",
+                         label = "Variable type",
+                         choices = c("Passengers", "Flights", "Passengers per flight"),
+                         selected = "", multiple = F),
+             dateRangeInput(inputId = "date_range", 
+                            label = "Period (YYYY-MM-DD)", 
+                            start = as.Date("2018-01-01", format = "%Y-%m-%d"), 
+                            end = as.Date("2019-01-01", format = "%Y-%m-%d"), 
+                            min = as.Date("2001-01-01", format = "%Y-%m-%d"),
+                            max = as.Date("2019-01-01", format = "%Y-%m-%d"), 
+                            format = "yyyy-mm-dd", startview = "month",
+                            weekstart = 0, language = "en", separator = " to ", width = NULL,
+                            autoclose = TRUE),
+             style = "background-color:#FCFDFF;")
+    ),
     fluidRow(
-        column(12,
-               highchartOutput(outputId = "traffic_ts"))
+      column(12,
+             h4(strong(textOutput(outputId = "ts_header"))),
+             highchartOutput(outputId = "traffic_ts"))
+    ),
+    fluidRow(
+      column(6,
+             h4(strong("Exposure to top destinations:")),
+             highchartOutput(outputId = "mkt_exposure2")),
+      column(6,
+             h4(strong("Exposure to airport group:")),
+             highchartOutput(outputId = "mkt_exposure")
       )
+    )
   ),
   
   
@@ -90,12 +96,12 @@ ui <- navbarPage(
   tabPanel(
     title = strong("Statistics by company"),
     fluidRow(
-        column(3,
-               selectInput(
-                 inputId = "company",
-                 label = "Airport Group",
-                 choices = c("ASUR","GAP","OMA","Mexico City","Other"),
-                 selected = "", multiple = F)),
+      column(3,
+             selectInput(
+               inputId = "company",
+               label = "Airport Group",
+               choices = c("ASUR","GAP","OMA","Mexico City","Other"),
+               selected = "", multiple = F)),
       column(3,
              selectInput(inputId = "type2.c",
                          label = "Traffic type",
@@ -117,8 +123,8 @@ ui <- navbarPage(
                             weekstart = 0, language = "en", separator = " to ", width = NULL,
                             autoclose = TRUE))
       
-      )
-)
+    )
+  )
 )
 
 
@@ -240,10 +246,11 @@ server <- function(input, output){
   })
   
   #Destination exposure
-  output$mkt_exposure <- renderHighchart({
+  output$mkt_exposure2 <- renderHighchart({
     
     
     input_code <- pax_cons$Origin_IATA[match(input$airport,pax_domesc$Origin)]
+    
     
     if(input$type2 == "Consolidated"){type2 = "domestic"}else{type2 = tolower(input$type2)}
     
@@ -257,8 +264,7 @@ server <- function(input, output){
     
     validate(
       if(length(test[paste0(input$date_range[1],"/",input$date_range[2])]) == 0){
-        paste0("Ooops, looks like ",simpleCap(input$airport)," doesn't have ",tolower(input$type2)," ",tolower(input$type3)," for the selected dates.\n",
-               "Please change your selection.")
+        ""
       } else {NULL}
     )
     
@@ -266,15 +272,74 @@ server <- function(input, output){
                               end.date = input$date_range[2],
                               type.2 = tolower(input$type2),
                               type.3 = tolower(input$type3),
-                              n = input$n_exposure)
+                              n = 10)
     
     if(input$type3 == "Passengers per flight"){
       aux.txt <- "Avg. pax per flight"
     } else {aux.txt <- "Market share"}
     
-    hchart(market, "column", hcaes(x = destinations, y = mkt_share, color = coloract), name = aux.txt) %>%
+    hchart(market, "waterfall", hcaes(x = destinations, y = mkt_share, color = coloract), name = aux.txt,
+           tooltip = list(pointFormat = paste0("Airport: {point.destinations} <br>",
+                                               "Operated by: {point.Origin_Airport_Group} <br>",
+                                               aux.txt, ": {point.mkt_share}"))) %>%
       hc_xAxis(title = list(text = "Destination")) %>%
-      hc_yAxis(title = list(text = aux.txt))
+      hc_yAxis(title = list(text = aux.txt)) %>%
+      hc_subtitle(text = "Source: SCT")
+    
+  })
+  
+  #Header text output:
+  output$ts_header <- renderText({
+    paste0(simpleCap(input$airport),"'s ", tolower(input$type3), " time series: ")
+  })
+  
+  #Routes under stress 
+  output$mkt_exposure <- renderHighchart({
+    
+    input_code <- pax_cons$Origin_IATA[match(input$airport,pax_domesc$Origin)]
+    
+    destinations <- find_destinations(input_code,
+                                      start_date = input$date_range[1],
+                                      end_date = input$date_range[2],
+                                      type.2 = tolower(input$type2),
+                                      type.3 = tolower(input$type3),
+                                      mkt_share = F)
+    
+    destinations <- colSums(destinations)
+    destinations <- data.frame(airport = names(destinations), pax = destinations)
+    destinations <- unique(merge(destinations, pax_cons[,c(1,5)],by.x = "airport", by.y = "Origin_IATA", all.x = F, all.y = F))
+    
+    if(input$type2 == "International"){
+      destinations <- unique(merge(destinations, airport_codes[,c(6,10)], by.x = "airport", by.y = "iata_code",
+                                   all.x = F, all.y = F))
+      destinations <- destinations %>%
+        group_by(iso_country) %>%
+        summarise(pax = sum(pax))
+      
+      destinations$mkt_share <- round(destinations$pax/sum(destinations$pax), digits = 2)*100 
+      names(destinations) <- c("variable", "pax", "mkt_share")
+      destinations$coloract <- destinations$variable
+    } else{
+      destinations <- destinations %>%
+        group_by(Origin_Airport_Group) %>%
+        summarise(pax = sum(pax))
+      
+      destinations$mkt_share <- round(destinations$pax/sum(destinations$pax), digits = 2)*100
+      
+      airport_colors <- data.frame(Origin_Airport_Group = c("ASUR", "GAP", "OMA", "Mexico City", "International", "Other"),
+                                   coloract = c("#376B7F", "#58436E", "#AB503C", "#538059", "#D3C771", "#948F8F"))
+      
+      destinations <- merge(destinations, airport_colors)
+      names(destinations) <- c("variable", "pax", "mkt_share", "coloract")
+    }
+    
+    hchart(destinations, "waterfall", hcaes(x = variable, y = mkt_share, color = coloract),
+           tooltip = list(pointFormat = paste0("Exposure: {point.mkt_share} % <br>",
+                                               "PAX transported: {point.pax}"))) %>%
+      hc_xAxis(title = list(text = "")) %>%
+      hc_yAxis(title = list(text = "")) %>%
+      hc_subtitle(text = "Source: SCT")
+    
     
   })
   
@@ -314,7 +379,8 @@ server <- function(input, output){
     
     validate(
       if(length(data[paste0(input$date_range[1],"/",input$date_range[2])]) == 0){
-        ""
+        paste0("Ooops, looks like ",simpleCap(input$airport)," doesn't have ",tolower(input$type2)," ",tolower(input$type3)," for the selected dates.\n",
+               "Please change your selection.")
       } else {NULL}
     )
     
@@ -332,8 +398,8 @@ server <- function(input, output){
       hc_add_series(plot_data, hcaes(x = Index, y = growth*100, color = coloract), 
                     yAxis = 1, type = 'column', 
                     name = "YoY change (%)") %>%
-      hc_title(text = paste0(input$type3, " YoY% growth (", paste(as.character(input$date_range), collapse = " to "),")"), 
-               style = list(fontWeight = "bold")) %>%
+      #hc_title(text = paste0(input$type3, " YoY% growth (", paste(as.character(input$date_range), collapse = " to "),")"), 
+      #         style = list(fontWeight = "bold")) %>%
       hc_subtitle(text = "Source: SCT") %>%
       hc_legend(verticalAlign = "top") 
     
