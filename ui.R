@@ -13,6 +13,7 @@ library(highcharter)
 library(shinythemes)
 library(rjson)
 library(markdown)
+library(kableExtra)
 
 # Load data ----
 flights_domesc <- read.csv("data/flights_domesc.csv", header = T, stringsAsFactors = F)
@@ -73,7 +74,11 @@ ui <- navbarPage(
                             format = "yyyy-mm-dd", startview = "month",
                             weekstart = 0, language = "en", separator = " to ", width = NULL,
                             autoclose = TRUE),
-             style = "background-color:#FCFDFF;")
+             style = "background-color:#FCFDFF;"),
+      column(9,
+             br(),
+             br(),
+             htmlOutput(outputId = "airport_info"))
     ),
     fluidRow(
       column(12,
@@ -82,10 +87,10 @@ ui <- navbarPage(
     ),
     fluidRow(
       column(6,
-             h4(strong("Exposure to top destinations:")),
+             h4(strong(textOutput(outputId = "mkt_header2"))),
              highchartOutput(outputId = "mkt_exposure2")),
       column(6,
-             h4(strong("Exposure to airport group:")),
+             h4(strong(textOutput(outputId = "mkt_header"))),
              highchartOutput(outputId = "mkt_exposure")
       )
     )
@@ -245,6 +250,23 @@ server <- function(input, output){
       hc_legend(verticalAlign = "top")
   })
   
+  #Airport info table:
+  output$airport_info <- renderText({
+    
+    input_code <- pax_cons$Origin_IATA[match(input$airport,pax_domesc$Origin)]
+    operated_by <- pax_cons$Origin_Airport_Group[match(input$airport,pax_domesc$Origin)]
+    dom_tua <- tua_data[192,input_code]
+    int_tua <- tua_data[96,input_code]
+    
+    airport_table <- data.frame(c("Airport: ", "Operated by: ", "Estimated domestic aeronautical tariff: ","Estimated international aeronautical tariff: "),
+                                c(simpleCap(input$airport), operated_by, paste0("$",dom_tua), paste0("$", int_tua)))
+    
+    kable(airport_table, col.names = NULL) %>%
+      kable_styling(c("striped", "bordered"), full_width = F) %>%
+      column_spec(1, bold = T)
+    
+  })
+  
   #Destination exposure
   output$mkt_exposure2 <- renderHighchart({
     
@@ -268,23 +290,46 @@ server <- function(input, output){
       } else {NULL}
     )
     
-    market <- market_exposure(input_code, start.date = input$date_range[1],
-                              end.date = input$date_range[2],
-                              type.2 = tolower(input$type2),
-                              type.3 = tolower(input$type3),
-                              n = 10)
     
     if(input$type3 == "Passengers per flight"){
+      
+      market <- market_exposure(input_code, start.date = input$date_range[1],
+                                end.date = input$date_range[2],
+                                type.2 = tolower(input$type2),
+                                type.3 = tolower(input$type3),
+                                n = 200)
+      
+      
       aux.txt <- "Avg. pax per flight"
-    } else {aux.txt <- "Market share"}
+      
+      hchart(market, "bar", hcaes(x = destinations, y = mkt_share, color = coloract), name = aux.txt,
+             tooltip = list(pointFormat = paste0("Airport: {point.destinations} <br>",
+                                                 "Operated by: {point.Origin_Airport_Group} <br>",
+                                                 aux.txt, ": {point.mkt_share}"))) %>%
+        hc_chart(polar = T) %>%
+        hc_xAxis(title = list(text = "")) %>%
+        hc_yAxis(title = list(text = "")) %>%
+        hc_subtitle(text = "Source: SCT")
+      
+    } else {
+      
+    
+    market <- market_exposure(input_code, start.date = input$date_range[1],
+                                end.date = input$date_range[2],
+                                type.2 = tolower(input$type2),
+                                type.3 = tolower(input$type3),
+                                n = 10)  
+        
+    aux.txt <- "Exposure"
     
     hchart(market, "waterfall", hcaes(x = destinations, y = mkt_share, color = coloract), name = aux.txt,
            tooltip = list(pointFormat = paste0("Airport: {point.destinations} <br>",
                                                "Operated by: {point.Origin_Airport_Group} <br>",
-                                               aux.txt, ": {point.mkt_share}"))) %>%
-      hc_xAxis(title = list(text = "Destination")) %>%
+                                               aux.txt, ": {point.mkt_share} %"))) %>%
+      hc_xAxis(title = list(text = "")) %>%
       hc_yAxis(title = list(text = aux.txt)) %>%
       hc_subtitle(text = "Source: SCT")
+    }
     
   })
   
@@ -293,10 +338,40 @@ server <- function(input, output){
     paste0(simpleCap(input$airport),"'s ", tolower(input$type3), " time series: ")
   })
   
+  #Header Mkt.share output:
+  output$mkt_header2 <- renderText({
+    if(input$type3 == "Passengers per flight"){
+      "Avg. pax per flight for top destinations:"
+    }else{"Exposure to main destinations:"}
+  })
+  
+  output$mkt_header <- renderText({
+    if(input$type3 == "Passengers per flight"){
+      "Avg. pax per flight for each airport group:"
+    }else{"Exposure to each airport group:"}
+  })
+  
   #Routes under stress 
   output$mkt_exposure <- renderHighchart({
     
     input_code <- pax_cons$Origin_IATA[match(input$airport,pax_domesc$Origin)]
+    
+    if(input$type2 == "Consolidated"){type2 = "domestic"}else{type2 = tolower(input$type2)}
+    
+    test <- convert_ts(input_code,
+                       type.1 = "airport",
+                       type.2 = type2,
+                       type.3 = "flights",
+                       start.date = input$date_range[1] %m-% months(12),
+                       end.date = input$date_range[2] 
+    )
+    
+    validate(
+      if(length(test[paste0(input$date_range[1],"/",input$date_range[2])]) == 0){
+        ""
+      } else {NULL}
+    )
+    
     
     destinations <- find_destinations(input_code,
                                       start_date = input$date_range[1],
@@ -305,40 +380,59 @@ server <- function(input, output){
                                       type.3 = tolower(input$type3),
                                       mkt_share = F)
     
-    destinations <- colSums(destinations)
-    destinations <- data.frame(airport = names(destinations), pax = destinations)
-    destinations <- unique(merge(destinations, pax_cons[,c(1,5)],by.x = "airport", by.y = "Origin_IATA", all.x = F, all.y = F))
-    
-    if(input$type2 == "International"){
-      destinations <- unique(merge(destinations, airport_codes[,c(6,10)], by.x = "airport", by.y = "iata_code",
-                                   all.x = F, all.y = F))
-      destinations <- destinations %>%
-        group_by(iso_country) %>%
-        summarise(pax = sum(pax))
+    if(input$type3 != "Passengers per flight"){
+      destinations <- colSums(destinations)
+      destinations <- data.frame(airport = names(destinations), pax = destinations)
+      destinations <- unique(merge(destinations, pax_cons[,c(1,5)],by.x = "airport", by.y = "Origin_IATA", all.x = F, all.y = F))
       
-      destinations$mkt_share <- round(destinations$pax/sum(destinations$pax), digits = 2)*100 
-      names(destinations) <- c("variable", "pax", "mkt_share")
-      destinations$coloract <- destinations$variable
+
+      destinations <- destinations %>%
+          group_by(Origin_Airport_Group) %>%
+          summarise(pax = sum(pax))
+        
+      destinations$mkt_share <- round(destinations$pax/sum(destinations$pax), digits = 2)*100
+        
+      airport_colors <- data.frame(Origin_Airport_Group = c("ASUR", "GAP", "OMA", "Mexico City", "International", "Other"),
+                                     coloract = c("#376B7F", "#58436E", "#AB503C", "#538059", "#D3C771", "#948F8F"))
+        
+      destinations <- merge(destinations, airport_colors)
+      names(destinations) <- c("variable", "pax", "mkt_share", "coloract")
+      
+      
+      if(input$type3 == "Flights"){aux.txt <- "Flights operated:"} else{aux.txt <- "PAX transported:"}
+      
+      hchart(destinations, "waterfall", hcaes(x = variable, y = mkt_share, color = coloract),
+             tooltip = list(pointFormat = paste0("Exposure: {point.mkt_share} % <br>",
+                                                 paste0(aux.txt," {point.pax}")))) %>%
+          hc_xAxis(title = list(text = "")) %>%
+          hc_yAxis(title = list(text = "Exposure")) %>%
+          hc_subtitle(text = "Source: SCT")
     } else{
+      destinations <- colMeans(destinations, na.rm = T)
+      destinations <- data.frame(airport = names(destinations), pax = destinations)
+      destinations <- unique(merge(destinations, pax_cons[,c(1,5)],by.x = "airport", by.y = "Origin_IATA", all.x = F, all.y = F))
+      
+      
       destinations <- destinations %>%
         group_by(Origin_Airport_Group) %>%
-        summarise(pax = sum(pax))
-      
-      destinations$mkt_share <- round(destinations$pax/sum(destinations$pax), digits = 2)*100
+        summarise(pax = round(mean(pax), digits = 1))
       
       airport_colors <- data.frame(Origin_Airport_Group = c("ASUR", "GAP", "OMA", "Mexico City", "International", "Other"),
                                    coloract = c("#376B7F", "#58436E", "#AB503C", "#538059", "#D3C771", "#948F8F"))
       
       destinations <- merge(destinations, airport_colors)
-      names(destinations) <- c("variable", "pax", "mkt_share", "coloract")
+      names(destinations) <- c("variable", "pax", "coloract")
+      
+      
+      hchart(destinations, "bar", hcaes(x = variable, y = pax, color = coloract),
+             tooltip = list(pointFormat = paste0("Avg. pax per flight: {point.pax} "))) %>%
+        hc_chart(polar = T) %>%
+        hc_xAxis(title = list(text = "")) %>%
+        hc_yAxis(title = list(text = "")) %>%
+        hc_subtitle(text = "Source: SCT")
     }
     
-    hchart(destinations, "waterfall", hcaes(x = variable, y = mkt_share, color = coloract),
-           tooltip = list(pointFormat = paste0("Exposure: {point.mkt_share} % <br>",
-                                               "PAX transported: {point.pax}"))) %>%
-      hc_xAxis(title = list(text = "")) %>%
-      hc_yAxis(title = list(text = "")) %>%
-      hc_subtitle(text = "Source: SCT")
+
     
     
   })
