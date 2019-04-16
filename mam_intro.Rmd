@@ -1,0 +1,33 @@
+---
+title: "Welcome to Mexican Air Monitor!"
+output: html_document
+---
+
+
+#### **Welcome to the Mexican Air Monitor!**
+
+Within this interactive application you will be able to analyze all relevant statistics for the Mexican air transportation 
+industry such as: passenger and flight traffic, market shares for airports and companies as well as companies main operating statistics 
+and financial information!
+
+**How does it work?**
+
+  * Select the tab on the upper panel to analyze Mexican traffic by airport, airport gorup or airline.
+  * Then, begin your analysis by choosing the variable which you wish to analyze and filter the data according to your needs.
+  * Yes! Forecasts are also available for selected airports and companies using econometric time series models based on the series' trends and seasonality. If you whish to know more about how the forecasts were made, click on the *About* tab on the upper panel.
+  
+**Where does the data come from?**
+
+  * All of the operating data used here is public and can be accessed directly through the [Mexican Secretariat of Communication's website](http://www.sct.gob.mx/transporte-y-medicina-preventiva/aeronautica-civil/5-estadisticas/), as well as the [Chamber of Mexican Air Transportation](http://canaero.org.mx/aviacion-regular-general-carga/estadistica-nacional-full/).
+  * Financial information is obtained directly from each company's financial reports and Yahoo finance.
+  
+**How regularly is the data updated?**
+
+  * Data for each month is ussually made available three weeks after the previous month end, and I wish to keep the application as up to date as possible :)
+  
+**Can I download the data?**
+
+  * Of course! There is a button which allows you to dowload the raw data at the bottom of the sidebar panel, just click on it and dowload the .csv file directly to your device.
+  
+  
+
