@@ -19,11 +19,12 @@ market_exposure <- function(airport, start.date, end.date, type.2, type.3, n){
   
   market <- market %>% filter(mkt_share > 1)
   
-  market <- market[order(market$mkt_share, decreasing = T),]
+  #market <- market[order(market$mkt_share, decreasing = T),]
   
   return(market)
   
 }
+
 
 
 
