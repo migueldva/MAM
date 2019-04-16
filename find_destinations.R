@@ -24,25 +24,25 @@ find_destinations <- function(airport, start_date = "2018-01-01",
   data <- data.aux %>%
     filter(Origin_IATA == airport | Destination_IATA == airport) %>%
     filter(Year >= format(as.Date(start_date, format="%Y-%m-%d"),"%Y") & Year <= format(as.Date(end_date, format="%Y-%m-%d"),"%Y"))
-    
+  
   destinations <<- unique(c(data$Origin_IATA[data$Origin_IATA != airport], data$Destination_IATA[data$Destination_IATA != airport]))
   
   if(mkt_share == T){
     if(type.3 == "passengers per flight"){
       flights <- sapply(destinations, 
-                              function(x) return(convert_ts(paste0(airport,"-",x),
-                                                               "route",
-                                                               type.2,
-                                                               "flights",
-                                                               start_date,
-                                                               end_date)))
+                        function(x) return(convert_ts(paste0(airport,"-",x),
+                                                      "route",
+                                                      type.2,
+                                                      "flights",
+                                                      start_date,
+                                                      end_date)))
       passengers <- sapply(destinations, 
-                                function(x) return(convert_ts(paste0(airport,"-",x),
-                                                               "route",
-                                                               type.2,
-                                                               "passengers",
-                                                               start_date,
-                                                               end_date)))
+                           function(x) return(convert_ts(paste0(airport,"-",x),
+                                                         "route",
+                                                         type.2,
+                                                         "passengers",
+                                                         start_date,
+                                                         end_date)))
       if(class(passengers) == "list"){
         passengers <- do.call(cbind, passengers)
         passengers[is.na(passengers)] <- 0
@@ -60,12 +60,12 @@ find_destinations <- function(airport, start_date = "2018-01-01",
       
     } else if (type.3 == "passengers" | type.3 == "flights"){
       variable <- sapply(destinations, 
-                                 function(x) return(convert_ts(paste0(airport,"-",x),
-                                                               "route",
-                                                               type.2,
-                                                               type.3,
-                                                               start_date,
-                                                               end_date)))
+                         function(x) return(convert_ts(paste0(airport,"-",x),
+                                                       "route",
+                                                       type.2,
+                                                       type.3,
+                                                       start_date,
+                                                       end_date)))
       if(class(variable) == "list"){
         variable <- do.call(cbind, variable)
         variable[is.na(variable)] <- 0
@@ -76,23 +76,53 @@ find_destinations <- function(airport, start_date = "2018-01-01",
       destinations <- data.frame(destinations, mkt_share = round(variable/sum(variable), digits = 3))
       return(destinations)
     }
-
+    
   } else{
-    variable <- sapply(destinations, 
-                      function(x) return(convert_ts(paste0(airport,"-",x),
-                                                              "route",
-                                                              type.2,
-                                                              type.3,
-                                                              start_date,
-                                                              end_date)))
-    if(class(variable) == "list"){
-      variable <- do.call(cbind, variable)
-      variable[is.na(variable)] <- 0
+    if(type.3 != "passengers per flight"){
+      variable <- sapply(destinations, 
+                         function(x) return(convert_ts(paste0(airport,"-",x),
+                                                       "route",
+                                                       type.2,
+                                                       type.3,
+                                                       start_date,
+                                                       end_date)))
+      if(class(variable) == "list"){
+        variable <- do.call(cbind, variable)
+        variable[is.na(variable)] <- 0
+      }
+    } else{
+      flights <- sapply(destinations, 
+                        function(x) return(convert_ts(paste0(airport,"-",x),
+                                                      "route",
+                                                      type.2,
+                                                      "flights",
+                                                      start_date,
+                                                      end_date)))
+      passengers <- sapply(destinations, 
+                           function(x) return(convert_ts(paste0(airport,"-",x),
+                                                         "route",
+                                                         type.2,
+                                                         "passengers",
+                                                         start_date,
+                                                         end_date)))
+      if(class(passengers) == "list"){
+        passengers <- do.call(cbind, passengers)
+        passengers[is.na(passengers)] <- 0
+      }
+      
+      if(class(flights) == "list"){
+        flights <- do.call(cbind, flights)
+        flights[is.na(flights)] <- 0
+      }
+      
+      variable <- passengers/flights
     }
+
     
     #destinations <- data.frame(destinations, type.3 = variable)
     return(variable)
   }
 }
+
 
 
